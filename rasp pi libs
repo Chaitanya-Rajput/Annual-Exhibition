@@ -1,0 +1,25 @@
+sudo apt update
+sudo apt full-upgrade
+then reboot
+sudo apt-get install libopencv-dev python3-opencv
+pip install opencv-python
+INSTALL YOLO
+pip install numpy
+pip install SpeechRecognition
+sudo apt-get install portaudio19-dev
+pip install pyaudio
+pip install paho-mqtt
+install ROS
+pip install networkx
+pip install scipy
+
+
+
+
+
+
+TESTING CODE-
+microphone:-arecord -l
+  
+
+
