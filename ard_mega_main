@@ -1,0 +1,192 @@
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
+#include <MPU6050.h>
+#include <math.h>
+
+// Constants for leg lengths (in cm)
+const float L1 = 10.0;  // Upper leg length
+const float L2 = 10.0;  // Lower leg length
+
+// Servo control range
+const int SERVOMIN = 150;
+const int SERVOMAX = 600;
+const int SERVO_NEUTRAL = 90;
+
+// Speed settings for walking gaits (slow, normal, fast)
+const int FOOT_HEIGHT_SLOW = 5;
+const int FOOT_HEIGHT_NORMAL = 10;
+const int FOOT_HEIGHT_FAST = 15;
+
+// PID Control Constants for Smooth Movement
+float Kp = 1.0, Ki = 0.1, Kd = 0.05;
+float previousError = 0, integral = 0;
+
+// Initialize devices
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
+MPU6050 mpu;
+
+// Receiver Pins
+#define THROTTLE_PIN 2
+#define YAW_PIN 3
+
+// Variables for receiver inputs
+int throttleInput = 0;
+int yawInput = 0;
+
+// Leg default servo positions (neutral positions)
+int defaultAngles[12] = {90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90};
+
+// Function to read PWM signal from receiver
+int readPWM(int pin) {
+  return pulseIn(pin, HIGH, 25000);
+}
+
+// Function to set servo angle
+void setServoAngle(int servo, int angle) {
+  angle = constrain(angle, 0, 180);
+  int pulse = map(angle, 0, 180, SERVOMIN, SERVOMAX);
+  pwm.setPWM(servo, 0, pulse);
+}
+
+// Inverse Kinematics to calculate joint angles
+void calculateIK(float x, float y, float z, float &shoulderAngle, float &elbowAngle, float &kneeAngle) {
+  float D = sqrt(x * x + y * y);  // Horizontal distance
+  
+  // Calculate angles using law of cosines
+  float theta1 = atan2(y, x);  // Shoulder angle
+  float cosTheta2 = (D * D - L1 * L1 - L2 * L2) / (2 * L1 * L2);
+  float theta2 = acos(cosTheta2);  // Elbow angle
+
+  // Calculate knee angle
+  float phi = atan2(z, D);  // Height adjustment
+  float theta3 = acos((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D));  // Knee angle
+  
+  // Convert radians to degrees
+  shoulderAngle = radiansToDegrees(theta1);
+  elbowAngle = radiansToDegrees(theta3 + phi);  // Adjusted for height
+  kneeAngle = radiansToDegrees(theta2);  // Elbow angle
+}
+
+// Helper function to convert radians to degrees
+float radiansToDegrees(float radians) {
+  return radians * 180.0 / PI;
+}
+
+// Move all joints of one leg
+void moveLeg(int shoulder, int elbow, int knee, float shoulderAngle, float elbowAngle, float kneeAngle) {
+  setServoAngle(shoulder, shoulderAngle);
+  setServoAngle(elbow, elbowAngle);
+  setServoAngle(knee, kneeAngle);
+}
+
+// Process IMU data for balancing
+void processIMU(float &roll, float &pitch) {
+  float ax, ay, az, gx, gy, gz;
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+
+  roll = atan2(ay, az) * 180 / PI;
+  pitch = atan2(-ax, sqrt(ay * ay + az * az)) * 180 / PI;
+}
+
+// Perform gait (alternating tripod gait)
+void performGait(int speedMode, float rotation) {
+  int footHeight = (speedMode == 1) ? FOOT_HEIGHT_SLOW :
+                   (speedMode == 2) ? FOOT_HEIGHT_NORMAL : FOOT_HEIGHT_FAST;
+  int stepDelay = (speedMode == 1) ? 300 : (speedMode == 2) ? 200 : 100;
+
+  // Calculate x, y, z positions for legs based on speed
+  float x = 10.0; // Horizontal movement range
+  float y = 0.0;  // Centerline of body
+  float z = footHeight;  // Height based on speed
+
+  // Calculate joint angles using inverse kinematics
+  float shoulderAngle, elbowAngle, kneeAngle;
+  
+  // Front-left leg (adjusted for rotation and speed)
+  calculateIK(x, y, z, shoulderAngle, elbowAngle, kneeAngle);
+  moveLeg(0, 1, 2, shoulderAngle + rotation, elbowAngle, kneeAngle);
+  delay(stepDelay);
+
+  // Front-right leg
+  calculateIK(-x, y, z, shoulderAngle, elbowAngle, kneeAngle);
+  moveLeg(3, 4, 5, shoulderAngle - rotation, elbowAngle, kneeAngle);
+  delay(stepDelay);
+
+  // Back-left leg
+  calculateIK(x, y, z, shoulderAngle, elbowAngle, kneeAngle);
+  moveLeg(6, 7, 8, shoulderAngle + rotation, elbowAngle, kneeAngle);
+  delay(stepDelay);
+
+  // Back-right leg
+  calculateIK(-x, y, z, shoulderAngle, elbowAngle, kneeAngle);
+  moveLeg(9, 10, 11, shoulderAngle - rotation, elbowAngle, kneeAngle);
+  delay(stepDelay);
+}
+
+// PID Controller for smooth movement
+float pidControl(float target, float current) {
+  float error = target - current;
+  integral += error;
+  float derivative = error - previousError;
+  
+  float output = Kp * error + Ki * integral + Kd * derivative;
+  previousError = error;
+  return output;
+}
+
+// Setup function
+void setup() {
+  Serial.begin(115200);
+
+  // Initialize I2C devices
+  Wire.begin();
+  pwm.begin();
+  pwm.setPWMFreq(50); // 50 Hz for servos
+
+  // Initialize MPU6050
+  mpu.initialize();
+  if (!mpu.testConnection()) {
+    Serial.println("MPU6050 not connected!");
+    while (1);
+  }
+
+  // Initialize receiver pins
+  pinMode(THROTTLE_PIN, INPUT);
+  pinMode(YAW_PIN, INPUT);
+
+  // Set servos to default positions
+  for (int i = 0; i < 12; i++) {
+    setServoAngle(i, defaultAngles[i]);
+  }
+
+  Serial.println("Setup complete!");
+}
+
+// Loop function
+void loop() {
+  // Read receiver inputs
+  throttleInput = readPWM(THROTTLE_PIN);
+  yawInput = readPWM(YAW_PIN);
+
+  // Determine speed mode based on throttle input
+  int speedMode = 1; // Default: slow
+  if (throttleInput > 1300 && throttleInput <= 1600) speedMode = 2; // Normal
+  else if (throttleInput > 1600) speedMode = 3; // Fast
+
+  // Map yaw input to rotation (-15 to 15 degrees)
+  float rotation = map(yawInput, 1000, 2000, -15, 15);
+
+  // Process IMU data for balancing
+  float roll, pitch;
+  processIMU(roll, pitch);
+
+  // Use PID control to adjust robot's body tilt based on IMU
+  float tiltAdjustment = pidControl(0, roll);  // Target roll = 0 (level)
+  rotation += tiltAdjustment;
+
+  // Perform gait based on speed mode and rotation
+  performGait(speedMode, rotation);
+
+  // Delay to stabilize loop frequency
+  delay(50);
+}
