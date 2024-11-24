@@ -1,0 +1,74 @@
+ Arduino Setup (for Servo Control and IMU)
+a. Servos (PWM Servo Driver)
+You are using a PWM Servo Driver (Adafruit 16-Channel) to control the servos for the robot's legs. You’ll connect the servos and PWM Driver as follows:
+
+PWM Servo Driver to Arduino (via I2C):
+
+VCC of PWM Driver -> 5V on Arduino
+GND of PWM Driver -> GND on Arduino
+SCL of PWM Driver -> SCL pin (A5 on Arduino Uno / Mega)
+SDA of PWM Driver -> SDA pin (A4 on Arduino Uno / Mega)
+Servos (connected to PWM Servo Driver):
+
+Servo signal wires (usually the white or yellow wire) are connected to the 16 available PWM output pins on the PWM driver (0–15).
+Power (VCC) and Ground (GND) of each servo should be connected to an external power source (often 5-6V for standard servos), NOT the Arduino.
+b. MPU6050 (IMU Sensor)
+You will use the MPU6050 for motion and balancing. The connections to the Arduino are:
+
+MPU6050 to Arduino (via I2C):
+VCC -> 5V on Arduino
+GND -> GND on Arduino
+SCL -> A5 on Arduino (or specific SCL pin)
+SDA -> A4 on Arduino (or specific SDA pin)
+c. FlySky Transmitter/Receiver (for Communication)
+Receiver to Arduino (with PWM signals for throttle and yaw):
+Throttle Pin (Channel 2) -> Pin 2 on Arduino
+Yaw Pin (Channel 1) -> Pin 3 on Arduino
+2. Raspberry Pi Setup (for Vision and Speech Recognition)
+a. Camera (Pi Camera)
+For vision processing, the Raspberry Pi Camera will be connected as follows:
+
+Pi Camera (Raspberry Pi Camera Module):
+Camera Module to the Camera Interface (CSI port) on the Raspberry Pi.
+Ensure that the camera is enabled in Raspberry Pi settings:
+bash
+Copy code
+sudo raspi-config
+Enable the camera under Interfacing Options and reboot the Pi.
+b. Microphone
+To enable speech recognition, you'll need a microphone connected to the Raspberry Pi. If you are using a USB microphone:
+
+USB Microphone to any available USB port on the Raspberry Pi.
+If you're using a 3.5mm audio jack microphone (less common), it may need an additional sound card for proper audio input.
+
+c. Power Supply
+Arduino and Servo Power: Servos require significant power, so connect them to an external 5V/6V power supply to ensure they receive enough current. The Arduino can be powered via its USB port or 5V pin.
+Raspberry Pi: Power your Raspberry Pi via the 5V micro-USB connector (standard power supply).
+3. Serial Communication between Raspberry Pi and Arduino
+The Raspberry Pi will communicate with the Arduino via USB (or serial). Connect the Arduino to the Raspberry Pi using a USB cable. The Raspberry Pi will use pyserial to communicate with Arduino for sending/receiving data.
+
+USB cable from Arduino to Raspberry Pi.
+Ensure you configure the correct serial port in your Raspberry Pi script (/dev/ttyUSB0 or similar).
+4. Optional: Additional Sensors for Advanced Features
+If you're using additional sensors like LiDAR (which you mentioned but decided against for now), you would connect them to the Raspberry Pi (via USB or UART or I2C, depending on the sensor).
+
+LiDAR (for example, LidarLite v3):
+I2C connection to Raspberry Pi (VCC to 5V, GND to GND, SDA to SDA, SCL to SCL).
+Follow the specific wiring instructions of the LiDAR sensor model you're using.
+Summary of Connections:
+Component	Pins	Arduino	Raspberry Pi
+PWM Servo Driver	SCL, SDA, VCC, GND	A5 (SCL), A4 (SDA), 5V, GND	I2C pins (SCL, SDA)
+Servos	Signal, VCC, GND	PWM pins (0–15)	-
+MPU6050 (IMU)	VCC, GND, SCL, SDA	5V, GND, A5 (SCL), A4 (SDA)	I2C (same as Arduino)
+FlySky Receiver	Throttle Pin, Yaw Pin	Pin 2 (Throttle), Pin 3 (Yaw)	-
+Pi Camera	Camera Interface	-	Camera Module Interface
+Microphone	USB or Audio Jack	-	USB or 3.5mm Audio Jack
+Arduino to Raspberry Pi	USB Cable	-	USB port
+Power Supply Notes:
+Arduino and Servo Power:
+
+The Arduino can be powered via USB or via the 5V pin.
+Servos must be powered by an external power supply (typically 5-6V) to avoid drawing too much power from the Arduino.
+Raspberry Pi:
+
+Use a dedicated 5V power supply for the Raspberry Pi via its micro-USB port.
